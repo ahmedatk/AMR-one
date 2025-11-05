@@ -1,80 +1,123 @@
-import React, { useState, useEffect } from 'react';
-import Heatmap from './Heatmap';
-import RiskChart from './RiskChart';
-import PredictionsTable from './PredictionsTable';
-import { fetchDashboardData } from '../services/api';
-import { DistrictData, Prediction, ChartData, RiskLevel } from '../types';
-import { MapPin, BarChart2, ShieldAlert, ShieldCheck } from './icons';
+import React, { useState, useEffect, useMemo } from 'react';
+import { fetchDashboardData } from '../services/api.ts';
+import { DistrictData, Prediction, ChartData, RiskLevel } from '../types.ts';
+import DashboardSkeleton from './DashboardSkeleton.tsx';
+import Heatmap from './Heatmap.tsx';
+import RiskChart from './RiskChart.tsx';
+import PredictionsTable from './PredictionsTable.tsx';
+import DistrictDetailModal from './DistrictDetailModal.tsx';
+import AlertBanner from './AlertBanner.tsx';
+import { UserCircle, AlertTriangle, CheckCircle, Clock } from './icons.tsx';
 
-const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string }> = ({ title, value, icon, color }) => (
-  <div className="bg-gray-800 border border-gray-700 p-6 rounded-lg flex items-center">
-    <div className={`p-3 rounded-full mr-4 ${color}`}>
-      {icon}
+const StatCard: React.FC<{ title: string; value: string | number; icon: React.ElementType; color: string; }> = ({ title, value, icon: Icon, color }) => (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-5 rounded-lg shadow-sm flex items-center">
+        <div className={`p-3 rounded-full mr-4 ${color}`}>
+            <Icon className="w-6 h-6 text-white" />
+        </div>
+        <div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+        </div>
     </div>
-    <div>
-      <p className="text-sm text-gray-400">{title}</p>
-      <p className="text-2xl font-bold text-white">{value}</p>
-    </div>
-  </div>
 );
 
+
 const Dashboard: React.FC = () => {
+  const [isLoading, setIsLoading] = useState(true);
   const [districts, setDistricts] = useState<DistrictData[]>([]);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [chartData, setChartData] = useState<ChartData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [selectedDistrict, setSelectedDistrict] = useState<DistrictData | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
-      setLoading(true);
-      const data = await fetchDashboardData();
-      setDistricts(data.districts);
-      setPredictions(data.predictions);
-      setChartData(data.chartData);
-      setLoading(false);
+      try {
+        const data = await fetchDashboardData();
+        setDistricts(data.districts);
+        setPredictions(data.predictions);
+        setChartData(data.chartData);
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
+
     loadData();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-full">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-indigo-500"></div>
-      </div>
-    );
-  }
-    
-  const highRiskDistricts = districts.filter(d => d.riskLevel === RiskLevel.High).length;
-  const totalDistricts = districts.length;
+  const highRiskPrediction = useMemo(() => {
+    return predictions
+      .filter(p => p.predictedRisk === RiskLevel.High)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+  }, [predictions]);
 
+  const stats = useMemo(() => {
+      if (isLoading) return { highRisk: 0, mediumRisk: 0, lowRisk: 0, total: 0 };
+      const highRisk = districts.filter(d => d.riskLevel === RiskLevel.High).length;
+      const mediumRisk = districts.filter(d => d.riskLevel === RiskLevel.Medium).length;
+      const lowRisk = districts.filter(d => d.riskLevel === RiskLevel.Low).length;
+      return {
+          highRisk,
+          mediumRisk,
+          lowRisk,
+          total: districts.length
+      }
+  }, [districts, isLoading]);
+
+  const handleDistrictSelect = (districtName: string) => {
+    const district = districts.find(d => d.name === districtName);
+    if (district) {
+      setSelectedDistrict(district);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setSelectedDistrict(null);
+  };
+
+  if (isLoading) {
+    return <DashboardSkeleton />;
+  }
+  
   return (
     <div className="space-y-8">
+      {highRiskPrediction && <AlertBanner prediction={highRiskPrediction} />}
+      
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Total Districts Monitored" value={totalDistricts} icon={<MapPin className="w-6 h-6 text-white"/>} color="bg-blue-600" />
-        <StatCard title="High-Risk Districts" value={highRiskDistricts} icon={<ShieldAlert className="w-6 h-6 text-white"/>} color="bg-red-600" />
-        <StatCard title="Overall Risk Trend" value="Increasing" icon={<BarChart2 className="w-6 h-6 text-white"/>} color="bg-yellow-600" />
-        <StatCard title="System Status" value="Operational" icon={<ShieldCheck className="w-6 h-6 text-white"/>} color="bg-green-600" />
+        <StatCard title="Total Districts" value={stats.total} icon={UserCircle} color="bg-blue-500" />
+        <StatCard title="High-Risk Districts" value={stats.highRisk} icon={AlertTriangle} color="bg-red-500" />
+        <StatCard title="Medium-Risk Districts" value={stats.mediumRisk} icon={Clock} color="bg-yellow-500" />
+        <StatCard title="Low-Risk Districts" value={stats.lowRisk} icon={CheckCircle} color="bg-green-500" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-gray-800 border border-gray-700 p-6 rounded-lg">
-          <h2 className="text-xl font-semibold mb-4 text-white">AMR Risk Heatmap</h2>
-          <div className="h-96 rounded-lg overflow-hidden">
-            <Heatmap data={districts} />
-          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        <div className="lg:col-span-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-lg shadow-sm">
+            <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Risk Hotspots</h2>
+            <div className="h-[480px]">
+              <Heatmap districts={districts} onDistrictClick={handleDistrictSelect} />
+            </div>
         </div>
-        <div className="bg-gray-800 border border-gray-700 p-6 rounded-lg">
-          <h2 className="text-xl font-semibold mb-4 text-white">Risk Level Trends</h2>
-          <div className="h-96">
-            <RiskChart data={chartData} />
-          </div>
+        <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-lg shadow-sm">
+            <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Risk Trends Over Time</h2>
+            <div className="h-[480px]">
+              <RiskChart data={chartData} />
+            </div>
         </div>
       </div>
-      
-      <div className="bg-gray-800 border border-gray-700 p-6 rounded-lg">
-        <h2 className="text-xl font-semibold mb-4 text-white">Recent Prediction Results</h2>
-        <PredictionsTable predictions={predictions} />
+
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-lg shadow-sm">
+        <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Recent Predictions</h2>
+        <PredictionsTable predictions={predictions} onRowClick={handleDistrictSelect} />
       </div>
+
+      {selectedDistrict && (
+        <DistrictDetailModal 
+          district={selectedDistrict} 
+          predictions={predictions.filter(p => p.district === selectedDistrict.name)}
+          onClose={handleCloseModal} 
+        />
+      )}
     </div>
   );
 };

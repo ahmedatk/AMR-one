@@ -1,130 +1,128 @@
 import React, { useState, useCallback } from 'react';
-import { runPrediction } from '../services/api';
-import { Prediction } from '../types';
-import PredictionsTable from './PredictionsTable';
-import { UploadCloud, FileText } from './icons';
+import { useDropzone } from 'react-dropzone';
+import { UploadCloud, FileCheck } from './icons.tsx';
 
-const UploadData: React.FC = () => {
+interface UploadDataProps {
+  onFileUpload: (file: File) => void;
+}
+
+const UploadData: React.FC<UploadDataProps> = ({ onFileUpload }) => {
   const [file, setFile] = useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [predictions, setPredictions] = useState<Prediction[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [preview, setPreview] = useState<{headers: string[], rows: string[][]}|null>(null);
 
-  const handleFileChange = (selectedFile: File | null) => {
-    if (selectedFile) {
-        if (selectedFile.type === 'text/csv') {
-            setFile(selectedFile);
-            setError(null);
-        } else {
-            setError('Invalid file type. Please upload a CSV file.');
-            setFile(null);
-        }
+  const parseCSVPreview = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+        const text = reader.result as string;
+        const lines = text.split('\n').slice(0, 6); // Read header + 5 rows
+        const headers = lines[0].split(',').map(h => h.trim());
+        const rows = lines.slice(1).map(line => line.split(',').map(cell => cell.trim()));
+        setPreview({ headers, rows });
+    };
+    reader.readAsText(file);
+  }
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0) {
+      const selectedFile = acceptedFiles[0];
+      setFile(selectedFile);
+      if (selectedFile.type === 'text/csv') {
+        parseCSVPreview(selectedFile);
+      } else {
+        setPreview(null);
+      }
     }
-  };
+  }, []);
 
-  const handleDragEvents = (e: React.DragEvent<HTMLDivElement>) => {
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'text/csv': ['.csv'],
+    },
+    multiple: false,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-    handleDragEvents(e);
-    setIsDragOver(true);
+    if (file) {
+      setIsUploading(true);
+      onFileUpload(file);
+    }
   };
   
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    handleDragEvents(e);
-    setIsDragOver(false);
-  };
-  
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    handleDragEvents(e);
-    setIsDragOver(false);
-    const droppedFile = e.dataTransfer.files?.[0];
-    if (droppedFile) {
-        handleFileChange(droppedFile);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!file) {
-      setError('Please select a file to upload.');
-      return;
-    }
-    setIsProcessing(true);
-    setPredictions(null);
-    try {
-      const result = await runPrediction(file);
-      setPredictions(result);
-    } catch (err) {
-      setError('An error occurred during prediction.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  const handleClear = () => {
+    setFile(null);
+    setPreview(null);
+  }
 
   return (
-    <div className="space-y-8">
-      <div className="bg-gray-800 border border-gray-700 p-8 rounded-lg">
-        <h2 className="text-2xl font-semibold mb-6 text-white">Upload AMR Data & Run Prediction</h2>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div 
-            onDrop={handleDrop}
-            onDragOver={handleDragEvents}
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            className={`relative border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
-              isDragOver ? 'border-indigo-500 bg-gray-700/50' : 'border-gray-600'
-            }`}
-          >
-            <UploadCloud className="mx-auto h-12 w-12 text-gray-500" />
-            <p className="mt-4 text-sm text-gray-400">
-              <span className="font-semibold text-indigo-400">Click to upload</span> or drag and drop
-            </p>
-            <p className="text-xs text-gray-500">CSV files only</p>
-            <input 
-              type="file" 
-              accept=".csv"
-              onChange={(e) => handleFileChange(e.target.files?.[0] || null)} 
-              className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
-            />
-          </div>
-          
-          {file && (
-            <div className="flex items-center justify-center p-3 bg-gray-700 rounded-md">
-                <FileText className="w-6 h-6 text-gray-400 mr-3" />
-                <span className="text-sm font-medium text-white">{file.name}</span>
-            </div>
-          )}
+    <div className="max-w-4xl mx-auto space-y-8">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-8 rounded-lg text-center">
+            <h2 className="text-2xl font-semibold mb-2 text-gray-900 dark:text-white">Upload Surveillance Data</h2>
+            <p className="text-gray-500 dark:text-gray-400 mb-6">Upload a CSV file to generate new risk predictions.</p>
+            
+            <form onSubmit={handleSubmit}>
+                {!file ? (
+                    <div
+                        {...getRootProps()}
+                        className={`p-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                            isDragActive
+                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                            : 'border-gray-300 dark:border-gray-600 hover:border-indigo-400 dark:hover:border-indigo-500'
+                        }`}
+                    >
+                        <input {...getInputProps()} />
+                        <div className="flex flex-col items-center">
+                            <UploadCloud className="w-12 h-12 text-gray-400 dark:text-gray-500 mb-4" />
+                            <p className="text-gray-500 dark:text-gray-400">
+                                {isDragActive ? 'Drop the file here ...' : 'Drag file here, or click to select'}
+                            </p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">CSV format only</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-left p-6 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div className="flex justify-between items-center">
+                             <div className="flex items-center space-x-3">
+                                <FileCheck className="w-8 h-8 text-green-500" />
+                                <div>
+                                    <p className="font-semibold text-gray-800 dark:text-gray-200">{file.name}</p>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">{(file.size / 1024).toFixed(2)} KB</p>
+                                </div>
+                             </div>
+                             <button type="button" onClick={handleClear} className="text-sm text-indigo-600 hover:underline">Clear</button>
+                        </div>
+                    </div>
+                )}
+                
+                {preview && (
+                    <div className="mt-6 text-left">
+                        <h3 className="font-semibold text-gray-700 dark:text-gray-300 mb-2">File Preview (First 5 Rows)</h3>
+                        <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                            <table className="min-w-full text-sm">
+                                <thead className="bg-gray-100 dark:bg-gray-700">
+                                    <tr>{preview.headers.map(h => <th key={h} className="p-2 font-medium">{h}</th>)}</tr>
+                                </thead>
+                                <tbody className="bg-white dark:bg-gray-800">
+                                    {preview.rows.map((row, i) => (
+                                        <tr key={i} className="border-t border-gray-200 dark:border-gray-700">{row.map((cell, j) => <td key={j} className="p-2 truncate">{cell}</td>)}</tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
 
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
-          
-          <div>
-            <button
-              type="submit"
-              disabled={!file || isProcessing}
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              {isProcessing ? 'Processing...' : 'Run Prediction'}
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {isProcessing && (
-         <div className="flex justify-center items-center h-40">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+                <button
+                    type="submit"
+                    disabled={!file || isUploading}
+                    className="mt-6 w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                    {isUploading ? 'Processing...' : 'Run Prediction'}
+                </button>
+            </form>
         </div>
-      )}
-
-      {predictions && (
-        <div className="bg-gray-800 border border-gray-700 p-6 rounded-lg">
-          <h3 className="text-xl font-semibold mb-4 text-white">Prediction Results</h3>
-          <PredictionsTable predictions={predictions} />
-        </div>
-      )}
     </div>
   );
 };

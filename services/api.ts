@@ -1,5 +1,5 @@
-import { MOCK_DISTRICT_DATA, MOCK_PREDICTIONS, MOCK_CHART_DATA } from '../constants';
-import { DistrictData, Prediction, ChartData, RiskLevel } from '../types';
+import { MOCK_DISTRICT_DATA, MOCK_PREDICTIONS, MOCK_CHART_DATA, MOCK_NOTIFICATIONS } from '../constants.ts';
+import { DistrictData, Prediction, ChartData, RiskLevel, Notification } from '../types.ts';
 
 export const fetchDashboardData = (): Promise<{
   districts: DistrictData[];
@@ -15,6 +15,14 @@ export const fetchDashboardData = (): Promise<{
       });
     }, 1000); // Simulate 1 second network delay
   });
+};
+
+export const fetchNotifications = (): Promise<Notification[]> => {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve(MOCK_NOTIFICATIONS);
+        }, 500);
+    });
 };
 
 export const runPrediction = (file: File): Promise<Prediction[]> => {

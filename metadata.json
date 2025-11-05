@@ -1,0 +1,7 @@
+{
+  "name": "AMR-One: Antimicrobial Resistance Prediction & Surveillance Platform",
+  "description": "A dashboard to upload, visualize, and predict antimicrobial resistance (AMR) risk across different districts using a heatmap, charts, and predictive analytics.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
